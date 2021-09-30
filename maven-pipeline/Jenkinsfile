@@ -1,0 +1,79 @@
+pipeline {
+
+    agent {
+        docker {
+            image  'maven:3.8.1-adoptopenjdk-11'
+            args ' \
+                    -u root:sudo \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v /usr/bin/docker:/usr/bin/docker:ro \
+                    -v /usr/local/bin/kubectl:/bin/kubectl:ro \
+                 '
+            reuseNode true 
+            // aynı node içinde birden fazla stage çalıştırmak için bunu true yapıyoruz 
+        }
+    }
+
+
+    stages {
+
+            stage('Build') {
+                steps {
+                    sh 'mvn --version'
+                }
+            }
+
+            stage('Git clone') {
+                steps {
+                    sh 'mkdir -p Module1'
+                    dir("Module1")
+                    {
+                        git branch: 'master',
+                        credentialsId: '822f88a9-fcc3-422a-af40-34e7126c17a7',
+                        url: 'ssh://git@192.168.1.42:7999/den/argocd-bamboo.git'
+                    }
+
+                }
+            }
+
+            stage('WhereAmI') {
+                steps {
+                    sh 'pwd'
+                }
+            }
+
+
+            stage('Git clone 2') {
+                steps {
+                    sh 'mkdir -p Module2'
+                    dir("Module2")
+                    {
+                        git branch: 'master',
+                        credentialsId: '822f88a9-fcc3-422a-af40-34e7126c17a7',
+                        url: 'ssh://git@192.168.1.42:7999/den/kube-config.git'
+                    }
+
+                }
+            }
+
+            stage('Install kubectl ') {
+                steps {
+                    sh 'curl -LO \
+                    "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"'  
+                    sh 'chmod u+x ./kubectl'  
+                    //sh './kubectl apply -f /var/jenkins_home/workspace/pipeline-docker-maven/Module2/sb-bench-dep.yaml --server 192.168.66.66:6443'
+                    sh './kubectl apply -f /var/jenkins_home/workspace/pipeline-docker-maven/Module2/sb-bench-dep.yaml --server 192.168.66.66:8001'
+                    // sh './kubectl apply -f /var/jenkins_home/workspace/pipeline-docker-maven/Module2/sb-bench-svc.yaml --server 192.168.66.66:6443'
+                    sh './kubectl apply -f /var/jenkins_home/workspace/pipeline-docker-maven/Module2/sb-bench-svc.yaml --server 192.168.66.66:8001'
+                    //sh 'export IMAGE_PATH=registry.hub.docker.com/erdemmucahitt/jenkins-maven'
+                    //sh 'mvn compile com.google.cloud.tools:jib-maven-plugin:2.7.1:build -Dimage=$IMAGE_PATH'
+                    sh 'cd /var/jenkins_home/workspace/pipeline-docker-maven/Module1'
+                    sh 'mvn -f /var/jenkins_home/workspace/pipeline-docker-maven/Module1/pom.xml compile jib:build'
+
+                }
+            }
+
+            
+
+        }
+}
